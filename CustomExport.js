@@ -167,7 +167,7 @@ function extractTextFromHtml(html) {
     return text;
 }
 
-function exportTableToWorksheet2(tableClassName, worksheet, startRow = 0) {
+function exportTableToWorksheet(tableClassName, worksheet, startRow = 0) {
     var tables = document.getElementsByClassName(tableClassName);
     var columnAddressCache = {};
     var startColumn = 1; // Global tracker for the starting column of each new table

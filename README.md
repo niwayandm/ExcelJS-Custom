@@ -99,7 +99,7 @@ Ensure you have ExcelJS included in your project as well:
 - **isTopLeftCellOfMerge(worksheet, cellAddress)**: Checks if the cell is the top-left cell of a merged cell range.
 - **columnToNumber(column)**: Converts an Excel column address to its corresponding column number.
 - **extractTextFromHtml(html)**: Extracts text content from an HTML string.
-- **exportTableToWorksheet2(tableClassName, worksheet, startRow)**: Exports an HTML table to an ExcelJS worksheet.
+- **exportTableToWorksheet(tableClassName, worksheet, startRow)**: Exports an HTML table to an ExcelJS worksheet.
 
 ## Acknowledgments
 - Thanks to the ExcelJS team for their powerful library.
