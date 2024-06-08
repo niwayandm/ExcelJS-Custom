@@ -1,4 +1,4 @@
-# Custom ExcelJS Functions
+# Custom ExcelJS
 
 ## Overview
 
