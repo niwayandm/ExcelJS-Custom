@@ -102,5 +102,4 @@ Ensure you have ExcelJS included in your project as well:
 - **exportTableToWorksheet2(tableClassName, worksheet, startRow)**: Exports an HTML table to an ExcelJS worksheet.
 
 ## Acknowledgments
-Thanks to the ExcelJS team for their powerful library.
-Thanks to the contributors of the original code for their insights and examples.
+- Thanks to the ExcelJS team for their powerful library.
