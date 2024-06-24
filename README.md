@@ -80,10 +80,7 @@ Ensure you have ExcelJS included in your project as well:
 
                 } catch (error) {
                 console.error('Error:', error);
-                } finally {
-                $('#loaderExcel').hide();
-
-            }
+                }
         }
     </script>
 </body>
