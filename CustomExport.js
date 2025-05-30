@@ -1,177 +1,163 @@
 /*!
-* Custom ExcelJS functions to export Excel with merging.
-* 2024 - Devina
-*/
-
+ * Custom ExcelJS functions to export Excel with merging
+ * 2025 - Devina
+ * Version 2.0.0
+ */
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Function for handling columns greater than z
 function getColumnAddress(colNum) {
-    let columnAddress = '';
+    let columnAddress = "";
     let dividend = colNum;
-    let remainder;
-
     while (dividend > 0) {
-        remainder = (dividend - 1) % 26;
-        columnAddress = String.fromCharCode('A'.charCodeAt(0) + remainder) + columnAddress;
-        dividend = parseInt((dividend - remainder) / 26);
+        let remainder = (dividend - 1) % 26;
+        columnAddress = String.fromCharCode("A".charCodeAt(0) + remainder) + columnAddress;
+        dividend = Math.floor((dividend - remainder) / 26);
     }
-
     return columnAddress;
 }
 
-function setCellStyle(htmlCell, excelCell) {
-    // Set cell background color
-    var bgColor = getComputedStyle(htmlCell).backgroundColor;
-    if (bgColor !== 'rgba(0, 0, 0, 0)' && bgColor.startsWith('rgb(') && bgColor !== 'rgb(255, 255, 255)') {
-        var color = bgColor.match(/\d+/g).map(Number);
-        excelCell.fill = {
-            type: 'pattern',
-            pattern: 'solid',
-            fgColor: {
-                argb: 'FF' + color.map(c => c.toString(16).padStart(2, '0')).join('')
+function setCellStyle(cell, excelCell) {
+    let cellHtml = cell.innerHTML.trim();
+    let cellText = cellHtml.replace(/&nbsp;/gi, "").trim();
+
+    if (cellText === "" && cellHtml != '&nbsp;') {
+        excelCell.value = " ";
+        excelCell.fill = undefined;
+        excelCell.font = undefined;
+        excelCell.alignment = undefined;
+        excelCell.border = undefined;
+        return;
+    }
+
+
+    let bgColor = getComputedStyle(cell).backgroundColor;
+
+    // if cell bgColor is empty, check parent <tr>
+    if (!bgColor || bgColor === "rgba(0, 0, 0, 0)") {
+        let row = cell.closest("tr");
+        if (row) {
+            let rowBgColor = getComputedStyle(row).backgroundColor;
+            if (rowBgColor && rowBgColor !== "rgba(0, 0, 0, 0)" && rowBgColor !== "rgb(255, 255, 255)") {
+                bgColor = rowBgColor;
             }
-        };
-
-        // Set font
-        excelCell.font = {
-            name: 'Arial',
-            size: 10,
-            bold: true
-        };
-    }
-
-    // Set alignment
-    if (excelCell.isMerged) {
-        excelCell.alignment = {
-            vertical: 'middle'
-        };
-    }
-
-    if (htmlCell.classList.contains('text-center')) {
-        excelCell.alignment = {
-            horizontal: 'center',
-            vertical: 'middle'
-        };
-    } else if (htmlCell.classList.contains('text-right')) {
-        excelCell.alignment = {
-            horizontal: 'right',
-        };
-    }
-
-    // Set cell borders
-    if (typeof excelCell.value === 'string') {
-        var trimmedValue = excelCell.value.replace(/\u00a0/g, '').trim();
-        if (trimmedValue !== '' || htmlCell.innerHTML.trim() === '&nbsp;') {
-            excelCell.border = {
-                top: {
-                    style: 'thin'
-                },
-                left: {
-                    style: 'thin'
-                },
-                bottom: {
-                    style: 'thin'
-                },
-                right: {
-                    style: 'thin'
-                }
-            };
         }
-    } else if (typeof excelCell.value === 'number') {
-        excelCell.border = {
-            top: {
-                style: 'thin'
-            },
-            left: {
-                style: 'thin'
-            },
-            bottom: {
-                style: 'thin'
-            },
-            right: {
-                style: 'thin'
+    }
+
+    // if neither cell nor row has bgColor, check thead/tbody
+    if (!bgColor || bgColor === "rgba(0, 0, 0, 0)") {
+        let section = cell.closest("thead, tbody");
+        if (section) {
+            let sectionBgColor = getComputedStyle(section).backgroundColor;
+            if (sectionBgColor && sectionBgColor !== "rgba(0, 0, 0, 0)" && sectionBgColor !== "rgb(255, 255, 255)") {
+                bgColor = sectionBgColor;
             }
+        }
+    }
+
+    let textColor = getComputedStyle(cell).color;
+    let fontWeight = getComputedStyle(cell).fontWeight;
+    let transform = window.getComputedStyle(cell).transform;
+    let writingMode = window.getComputedStyle(cell).writingMode;
+    let alignVertical = "bottom";
+    let alignHorizontal = "left";
+    let bold = fontWeight >= 700;
+
+    if (bgColor !== "rgba(0, 0, 0, 0)" && bgColor.startsWith("rgb(") && bgColor !== "rgb(255, 255, 255)") {
+        let backgroundColor = bgColor.match(/\d+/g).map(Number);
+        excelCell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FF" + backgroundColor.map(c => c.toString(16).padStart(2, "0")).join("") }
         };
     }
 
+    textColor = textColor !== "rgba(0, 0, 0, 0)" && textColor.startsWith("rgb(") && textColor !== "rgb(255, 255, 255)"
+        ? "FF" + textColor.match(/\d+/g).map(Number).map(c => c.toString(16).padStart(2, "0")).join("")
+        : "FF000000";
+
+    excelCell.font = { name: "Arial", size: 12, bold: bold, color: { argb: textColor } };
+
+    let rotate = transform !== "none" ? getRotationAngle(transform) : 0;
+    if (writingMode === "vertical-rl") rotate -= 90;
+    if (excelCell.isMerged) alignVertical = alignHorizontal = "middle";
+    if (cell.classList.contains("text-center")) alignHorizontal = "center";
+    if (cell.classList.contains("text-right")) alignHorizontal = "right";
+
+    excelCell.alignment = { horizontal: alignHorizontal, vertical: alignVertical, textRotation: rotate };
+    if (cell.innerHTML.includes("<br")) excelCell.alignment.wrapText = true;
+    if (typeof excelCell.value === "string" || typeof excelCell.value === "number") {
+        excelCell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+    }
+}
+
+
+function getRotationAngle(transformMatrix) {
+    let values = transformMatrix.split("(")[1].split(")")[0].split(",");
+    return Math.round(Math.atan2(values[1], values[0]) * (180 / Math.PI));
 }
 
 function getColSpan(worksheet, cellAddress, rowNumber) {
-    var currentColumn = cellAddress.match(/[A-Z]+/)[0];
-    var colSpan = 0;
-
+    var currentColumn = cellAddress.match(/[A-Z]+/)[0],
+        colSpan = 0;
     do {
         colSpan++;
-        var nextColumn = getColumnAddress(columnToNumber(currentColumn) + colSpan);
-        var nextCellAddress = nextColumn + rowNumber;
-        var nextCell = worksheet.getCell(nextCellAddress);
+        var nextColumn,
+            nextCellAddress = getColumnAddress(columnToNumber(currentColumn) + colSpan) + rowNumber,
+            nextCell = worksheet.getCell(nextCellAddress);
     } while (nextCell.isMerged);
-
     return colSpan;
 }
 
 function getMaxRow(worksheet) {
-    var maxRow = 0;
-    worksheet.eachRow(function (row, rowNumber) {
-        maxRow = rowNumber;
-    });
+    let maxRow = 0;
+    worksheet.eachRow((_, rowNumber) => maxRow = rowNumber);
     return maxRow;
 }
 
 function isTopLeftCellOfMerge(worksheet, cellAddress) {
-    var cell = worksheet.getCell(cellAddress);
+    let cell = worksheet.getCell(cellAddress);
     if (!cell.isMerged) return false;
+    let rowNumber = cell.row;
+    let columnLetter = cellAddress.match(/[A-Z]+/)[0];
 
-    var rowNumber = cell.row;
-    var columnLetter = cellAddress.match(/[A-Z]+/)[0];
-
-    // Check if any previous cell in the same row is merged and shares the merge area
-    for (var i = 1; i < columnLetter.length; i++) {
-        var prevCellAddress = columnLetter.substring(0, i) + rowNumber;
-        var prevCell = worksheet.getCell(prevCellAddress);
-        if (prevCell.isMerged && cell.master === prevCell.master) {
-            return false;
-        }
+    for (let i = 1; i < columnLetter.length; i++) {
+        let prevCell = worksheet.getCell(columnLetter.substring(0, i) + rowNumber);
+        if (prevCell.isMerged && cell.master === prevCell.master) return false;
     }
-
-    // Check if any previous cell in the same column is merged and shares the merge area
-    for (var j = rowNumber - 1; j > 0; j--) {
-        var aboveCellAddress = columnLetter + j;
-        var aboveCell = worksheet.getCell(aboveCellAddress);
-        if (aboveCell.isMerged && cell.master === aboveCell.master) {
-            return false;
-        }
+    for (let j = rowNumber - 1; j > 0; j--) {
+        let aboveCell = worksheet.getCell(columnLetter + j);
+        if (aboveCell.isMerged && cell.master === aboveCell.master) return false;
     }
-
     return true;
 }
 
-function columnToNumber(column) {
-    let columnNumber = 0;
-    for (let i = 0; i < column.length; i++) {
-        columnNumber *= 26;
-        columnNumber += (column.charCodeAt(i) - ('A'.charCodeAt(0) - 1));
+function isThRowBelow(cell) {
+    let row = cell.parentElement,
+        table = row.closest("table"),
+        cellIndex = Array.from(row.cells).indexOf(cell),
+        allRows = Array.from(table.querySelectorAll("tr"));
+    if (cellIndex === row.cells.length - 1) {
+        let nextRowIndex = allRows.indexOf(row) + 1;
+        if (nextRowIndex < allRows.length) {
+            let nextRow = allRows[nextRowIndex];
+            if ("th" === cell.tagName.toLowerCase() && nextRow.cells.length > 0 && "th" === nextRow.cells[0].tagName.toLowerCase()) return !0;
+        }
     }
-    return columnNumber;
+    return !1;
 }
 
-function extractTextFromHtml(html) {
-    // Create a temporary div element to parse the HTML content
-    var tempDiv = document.createElement("div");
-    tempDiv.innerHTML = html.replace(/&nbsp;/g, '\u00A0'); // Convert &nbsp; to Unicode
-
-    var text = tempDiv.textContent || tempDiv.innerText || "";
-    return text;
+function columnToNumber(column) {
+    return column.split("").reduce((columnNumber, char) =>
+        columnNumber * 26 + (char.charCodeAt(0) - ("A".charCodeAt(0) - 1)), 0);
 }
 
-function exportTableToWorksheet(tableClassName, worksheet, startRow = 0) {
-    var tables = document.getElementsByClassName(tableClassName);
-    var columnAddressCache = {};
-    var startColumn = 1; // Global tracker for the starting column of each new table
-    var columnWidths = {}; // Object to track max widths of columns
+function exportTableToWorksheet(tableClassName, worksheet, startRow = 0, excludeNumberFormatting = []) {
+    let tables = document.getElementsByClassName(tableClassName);
+    let columnAddressCache = {};
+    let columnWidths = {};
+    let startColumn = 1;
 
     function getCachedColumnAddress(columnNumber) {
         if (!columnAddressCache[columnNumber]) {
@@ -181,171 +167,110 @@ function exportTableToWorksheet(tableClassName, worksheet, startRow = 0) {
     }
 
     function getColumnWidth(text) {
-        return text.length * 1.75;
+        return 8.5 + 3 * Math.log(text.length);
     }
 
-    for (var i = 0; i < tables.length; i++) {
-        var table = tables[i];
-        var rows = table.rows;
+    for (let i = 0; i < tables.length; i++) {
+        var rows = tables[i].rows;
         var maxCols = 0;
-        var maxRows = 0;
+        var lastMaxRow = 0;
+        var lastCell = null;
+        var localMaxCol = 0;
 
-
-        for (var j = 0; j < rows.length; j++) {
-            var adjustedRow = j + startRow + maxRows;
+        for (let j = 0; j < rows.length; j++) {
+            var adjustedRow = j + startRow + lastMaxRow;
             var row = rows[j];
             var currentCell = startColumn;
-            var cells = row.cells;
             var localMaxCol = 0;
-
             var excelRow = worksheet.getRow(adjustedRow + 1);
+            var isLastCell = false;
 
-            // Set grouping level
-            if (row.classList.contains('collapse') && !row.classList.contains('SU') && !row.classList.contains('PF')) {
-                excelRow.outlineLevel = 1;
-                if (row.classList.contains('in')) {
-                    excelRow.hidden = false;
+            for (let k = 0; k < row.cells.length; k++) {
+                var cell = row.cells[k];
+                let cellValue;
+                if (cell.innerHTML.includes("<br")) {
+                    const temp = document.createElement("div");
+                    temp.innerHTML = cell.innerHTML.replace(/<br\s*\/?>/gi, "\n");
+                    cellValue = temp.textContent || temp.innerText || "";
                 } else {
-                    excelRow.hidden = true;
+                    cellValue = cell.textContent.trim();
                 }
-            } else if (row.classList.contains('PF')) {
-                excelRow.hidden = true;
-            }
 
-            for (var k = 0; k < cells.length; k++) {
-                var cell = cells[k];
-                var cellValue = cell.innerText || cell.textContent;
-                var cellAddress = `${getColumnAddress(currentCell)}${adjustedRow + 1}`;
+                // find the next unmerged cell
+                var nextAvailableColumn = currentCell;
+                while (worksheet.getCell(`${getColumnAddress(nextAvailableColumn)}${adjustedRow + 1}`).isMerged) {
+                    nextAvailableColumn++; // skip merged
+                }
+                var cellAddress = `${getColumnAddress(nextAvailableColumn)}${adjustedRow + 1}`;
                 var excelCell = worksheet.getCell(cellAddress);
-                var isTopLeft = isTopLeftCellOfMerge(worksheet, cellAddress);
 
-                // console.log("Initial address: " + cellAddress)
-
-                // Skip processing if the cell is merged and not the top-left cell of the merge area
-                if (excelCell.isMerged && !isTopLeft) {
-                    // console.log("Skipping: " + cellAddress + " as it's not the top-left of the merge.");
-
-                    var colSpan = getColSpan(worksheet, cellAddress, adjustedRow + 1)
-                    adjustedRow -= maxRows;
-                    currentCell += colSpan;
-
-                    maxRows = 0;
-
-                    cellAddress = `${getColumnAddress(currentCell)}${adjustedRow + 1}`;
-                    excelCell = worksheet.getCell(cellAddress);
-
-                    // console.log("New Address: " + cellAddress);
-
-                }
-
-                // Handle merged cells
                 var rowSpan = cell.rowSpan || 1;
                 var colSpan = cell.colSpan || 1;
-                if (rowSpan > 1 || colSpan > 1) {
-                    var mergeStart = cellAddress;
-                    var mergeEnd = getCachedColumnAddress(currentCell + colSpan - 1) + (adjustedRow + rowSpan);
 
-                    // console.log("Merging: " + mergeStart + " to " + mergeEnd);
+                if (rowSpan > 1 || colSpan > 1) {
+                    let mergeStart = cellAddress;
+                    let mergeEnd = getColumnAddress(nextAvailableColumn + colSpan - 1) + (adjustedRow + rowSpan);
                     worksheet.mergeCells(mergeStart, mergeEnd);
                 }
 
-                // Change cell type to numeric or percentage
-
-                if (cellValue.trim().replace(/,/g, '').endsWith('%') && !isNaN(cellValue.trim().replace(/,/g, '').replace('%', '')) && cellValue.trim().replace(/,/g, '').replace('%', '').length > 1) {
-                    cellValue = parseFloat(cellValue.trim().replace(/,/g, '').replace('%', '')) / 100;
-                    if (Number.isInteger(cellValue * 100)) {
-                        excelCell.numFmt = '0%';
-                    } else {
-                        excelCell.numFmt = '0.00%';
+                // check if column is excluded from dynamic number formatting
+                if (!excludeNumberFormatting.includes(getColumnAddress(nextAvailableColumn))) {
+                    // format numbers and percentage
+                    if (cellValue.trim().replace(/,/g, "").endsWith("%")) {
+                        cellValue = parseFloat(cellValue.trim().replace(/,/g, "").replace("%", "")) / 100;
+                        excelCell.numFmt = Number.isInteger(100 * cellValue) ? "0%" : "0.00%";
+                    } else if (!isNaN(cellValue.trim().replace(/,/g, "")) && cellValue.trim() !== "") {
+                        cellValue = parseFloat(cellValue.trim().replace(/,/g, ""));
+                        excelCell.numFmt = Number.isInteger(cellValue) ? "#,##0" : "#,##0.00";
                     }
-                } else if (!isNaN(cellValue.trim().replace(/,/g, '')) && cellValue.trim() !== '') {
-                    cellValue = cellValue.trim().replace(/,/g, '');
-                    cellValue = parseFloat(cellValue);
-
-                    if (Number.isInteger(cellValue)) {
-                        excelCell.numFmt = '#,##0';
-                    } else {
-                        excelCell.numFmt = '#,##0.00';
-                    }
-
                 }
 
-                excelCell.value = cellValue;
+                // set dynamic column widths
+                if (cellValue !== " " && (!excelCell.isMerged || isTopLeftCellOfMerge(worksheet, cellAddress))) {
+                    let columnWidth = getColumnWidth(cellValue.toString().replace(/,/g, ""));
+                    if (!columnWidths[currentCell] || columnWidth >= columnWidths[currentCell]) {
+                        columnWidths[currentCell] = columnWidth;
+                    }
+                } else if (!columnWidths[currentCell] || columnWidths[currentCell] <= 8.3) {
+                    columnWidths[currentCell] = 8.3;
+                }
 
-
-                // Handle cell styling
+                excelCell.value = typeof cellValue === "string" ? cellValue.trim() : cellValue;
                 setCellStyle(cell, excelCell);
 
-                // Set or update the max width for the current column
-                if ((rowSpan > 1 || colSpan > 1) && (cell.tagName.toLowerCase() !== 'th')) {
-
-                } else if (excelCell.value !== '' || (!excelCell.isMerged && !isTopLeft)) {
-                    if (tableClassName.includes("2") && tableClassName.includes("22")) {
-
-                    } else {
-                        var columnWidth = getColumnWidth(cellValue.toString().replace(/,/g, ''));
-                        if (!columnWidths[currentCell] || columnWidth >= columnWidths[currentCell]) {
-                            columnWidths[currentCell] = columnWidth;
-                        }
-                    }
-
-                } else {
-                    if (!columnWidths[currentCell] || 8.3 >= columnWidths[currentCell]) {
-                        columnWidths[currentCell] = 8.3;
-                    }
-                }
-
-                currentCell += colSpan;
-                localMaxCol = Math.max(localMaxCol, currentCell - 1);
+                currentCell = nextAvailableColumn + colSpan; // Move to the next available column
             }
-            maxCols = Math.max(maxCols, localMaxCol);
 
-            if (String(excelCell.value).includes("TOTAL")) {
-                // console.log(rowSpan - 1);
-                maxRows = 0;
-            } else {
-                maxRows += (rowSpan - maxRows > 0) ? rowSpan - 1 : 0;
-            }
+            (maxCols = Math.max(maxCols, localMaxCol)), isLastCell ? ((lastMaxRow = 0), (lastCell = cell)) : (lastCell = null);
 
         }
 
-        excelRow.commit();
-        startColumn = localMaxCol + 2;
+        excelRow.commit(), (startColumn = localMaxCol + 2);
     }
 
-    // Set column widths by max widths for each column
+    // apply column widths
     for (let columnIndex in columnWidths) {
-        var columnLetter = getColumnAddress(parseInt(columnIndex));
-        var column = worksheet.getColumn(columnLetter);
-        column.width = columnWidths[columnIndex] + 2;
-
-        // console.log(`${columnLetter} has width of ${columnWidths[columnIndex] + 2}`)
+        let columnLetter = getColumnAddress(parseInt(columnIndex));
+        worksheet.getColumn(columnLetter).width = columnWidths[columnIndex] + 2;
     }
 
-    worksheet.views = [{
-        zoomScale: 70
-    }];
+    worksheet.views = [{ zoomScale: 70 }];
 }
 
 async function waitForTableLoad(tableId) {
-    await delay(500);
-
-    return new Promise((resolve, reject) => {
-        let attempts = 0;
-
-        function checkTable() {
-            const table = document.querySelector(tableId);
-            console.log(table)
-            if (table && table.rows.length > 0) {
-                resolve();
-            } else if (attempts < 50) {
-                attempts++;
-                setTimeout(checkTable, 1000);
-            } else {
-                reject(new Error('Table did not load in time.'));
+    return (
+        await delay(500),
+        new Promise((resolve, reject) => {
+            let attempts = 0;
+            function checkTable() {
+                let tables = document.querySelectorAll("table");
+                let foundTable = null;
+                tables.forEach((table) => {
+                    Array.from(table.classList).some((className) => className.startsWith(tableId)) && (foundTable = table);
+                }),
+                    foundTable && foundTable.rows.length > 0 ? resolve() : attempts < 50 ? (attempts++, setTimeout(checkTable, 1e3)) : reject(new Error("Table did not load in time."));
             }
-        }
-
-        checkTable();
-    });
+            checkTable();
+        })
+    );
 }
