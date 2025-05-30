@@ -1,7 +1,7 @@
 /*!
  * Custom ExcelJS functions to export Excel with merging
  * 2025 - Devina
- * Version 2.0.0
+ * Version 2.1.0
  */
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -31,7 +31,6 @@ function setCellStyle(cell, excelCell) {
         return;
     }
 
-
     let bgColor = getComputedStyle(cell).backgroundColor;
 
     // if cell bgColor is empty, check parent <tr>
@@ -57,12 +56,16 @@ function setCellStyle(cell, excelCell) {
     }
 
     let textColor = getComputedStyle(cell).color;
-    let fontWeight = getComputedStyle(cell).fontWeight;
     let transform = window.getComputedStyle(cell).transform;
     let writingMode = window.getComputedStyle(cell).writingMode;
     let alignVertical = "bottom";
     let alignHorizontal = "left";
+    let fontWeight = getComputedStyle(cell).fontWeight;
+    if (cell.innerHTML.includes("<b") || cell.innerHTML.includes("<strong")) {
+        fontWeight = 700;
+    }
     let bold = fontWeight >= 700;
+
 
     if (bgColor !== "rgba(0, 0, 0, 0)" && bgColor.startsWith("rgb(") && bgColor !== "rgb(255, 255, 255)") {
         let backgroundColor = bgColor.match(/\d+/g).map(Number);
@@ -170,12 +173,52 @@ function exportTableToWorksheet(tableClassName, worksheet, startRow = 0, exclude
         return 8.5 + 3 * Math.log(text.length);
     }
 
+
     for (let i = 0; i < tables.length; i++) {
+        let table = tables[i];
         var rows = tables[i].rows;
         var maxCols = 0;
         var lastMaxRow = 0;
         var lastCell = null;
         var localMaxCol = 0;
+        var hiddenColumns = new Set();
+
+        let headerRows = table.querySelectorAll("thead tr");
+        let colTracker = [];
+
+        if (headerRows.length > 0) {
+            // Column hiding from header
+            for (let r = 0; r < headerRows.length; r++) {
+                let row = headerRows[r];
+                let cells = Array.from(row.cells);
+                let colIndex = 0;
+
+                for (let cell of cells) {
+                    // Find the next free column
+                    while (colTracker[r]?.[colIndex]) colIndex++;
+
+                    let rowspan = cell.rowSpan || 1;
+                    let colspan = cell.colSpan || 1;
+
+                    // Assign Excel column index for this cell
+                    for (let i = 0; i < colspan; i++) {
+                        for (let j = 0; j < rowspan; j++) {
+                            if (!colTracker[r + j]) colTracker[r + j] = [];
+                            colTracker[r + j][colIndex + i] = true;
+                        }
+                    }
+
+                    // If this header cell should trigger column hiding:
+                    if (cell.classList.contains("hide-column")) {
+                        for (let i = 0; i < colspan; i++) {
+                            hiddenColumns.add(colIndex + i + 1);
+                        }
+                    }
+
+                    colIndex += colspan;
+                }
+            }
+        }
 
         for (let j = 0; j < rows.length; j++) {
             var adjustedRow = j + startRow + lastMaxRow;
@@ -184,6 +227,20 @@ function exportTableToWorksheet(tableClassName, worksheet, startRow = 0, exclude
             var localMaxCol = 0;
             var excelRow = worksheet.getRow(adjustedRow + 1);
             var isLastCell = false;
+
+            // Set grouping level
+            if (row.classList.contains('collapse')) {
+                excelRow.outlineLevel = 1;
+                if (row.classList.contains('in')) {
+                    excelRow.hidden = false;
+                } else {
+                    excelRow.hidden = true;
+                }
+            }
+
+            if (row.classList.contains("hidden")) {
+                excelRow.hidden = true;
+            }
 
             for (let k = 0; k < row.cells.length; k++) {
                 var cell = row.cells[k];
@@ -252,6 +309,10 @@ function exportTableToWorksheet(tableClassName, worksheet, startRow = 0, exclude
     for (let columnIndex in columnWidths) {
         let columnLetter = getColumnAddress(parseInt(columnIndex));
         worksheet.getColumn(columnLetter).width = columnWidths[columnIndex] + 2;
+    }
+
+    for (let col of hiddenColumns) {
+        worksheet.getColumn(col).hidden = true;
     }
 
     worksheet.views = [{ zoomScale: 70 }];
